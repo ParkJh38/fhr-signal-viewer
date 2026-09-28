@@ -1,0 +1,2826 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="로컬 태아심박동(FHR) 시계열 및 패턴 Label 열람 도구">
+    <title>FHR Signal Viewer</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1f37'/%3E%3Cpath d='M10 35h10l5-15 8 28 7-18 5 5h9' fill='none' stroke='%2338bdf8' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+    <style>
+      :root {
+        color-scheme: dark;
+        --ink: #e8f0fb;
+        --muted: #9aacc4;
+        --faint: #61758f;
+        --navy-950: #07111f;
+        --navy-900: #0b1d32;
+        --navy-850: #0d243d;
+        --line: #203a59;
+        --line-soft: #18314c;
+        --cyan: #38bdf8;
+        --cyan-soft: rgba(56, 189, 248, 0.14);
+        --green: #34d399;
+        --warning: #fbbf24;
+        --danger: #fb7185;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        min-height: 100%;
+        margin: 0;
+        color: var(--ink);
+        background: var(--navy-950);
+      }
+
+      body { font-size: 16px; line-height: 1.45; }
+      button, input, select { font: inherit; }
+      button { cursor: pointer; }
+      .is-hidden { display: none !important; }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      .landing {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 26px;
+        background:
+          radial-gradient(circle at 84% 8%, rgba(14, 165, 233, 0.18), transparent 27rem),
+          radial-gradient(circle at 12% 90%, rgba(139, 92, 246, 0.14), transparent 30rem),
+          var(--navy-950);
+      }
+
+      .landing-card {
+        width: min(690px, 100%);
+        padding: clamp(28px, 6vw, 56px);
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: linear-gradient(145deg, rgba(14, 38, 64, 0.94), rgba(7, 20, 36, 0.98));
+        box-shadow: 0 28px 70px rgba(0, 0, 0, 0.32);
+      }
+
+      .landing-mark {
+        display: grid;
+        place-items: center;
+        width: 52px;
+        height: 52px;
+        border-radius: 15px;
+        color: #06203a;
+        background: linear-gradient(135deg, #7dd3fc, #22d3ee);
+        font-size: 0.82rem;
+        font-weight: 850;
+        letter-spacing: 0.08em;
+      }
+
+      .eyebrow, .filter-label, .chart-kicker {
+        margin: 0;
+        color: var(--faint);
+        font-size: 0.69rem;
+        font-weight: 760;
+        letter-spacing: 0.12em;
+      }
+
+      .landing h1 {
+        margin: 21px 0 10px;
+        font-size: clamp(2rem, 5vw, 3rem);
+        line-height: 1.08;
+        letter-spacing: -0.04em;
+      }
+
+      .landing-copy {
+        max-width: 530px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 1rem;
+      }
+
+      .folder-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 46px;
+        margin-top: 28px;
+        border-radius: 10px;
+        padding: 10px 16px;
+        color: #06203a;
+        background: linear-gradient(135deg, #7dd3fc, #22d3ee);
+        font-size: 0.92rem;
+        font-weight: 780;
+        cursor: pointer;
+      }
+
+      .folder-button:hover, .folder-button:focus-visible {
+        filter: brightness(1.05);
+        outline: 3px solid rgba(125, 211, 252, 0.28);
+      }
+
+      .landing-note {
+        margin: 15px 0 0;
+        color: var(--faint);
+        font-size: 0.78rem;
+      }
+
+      .landing-error {
+        margin: 18px 0 0;
+        color: #fecdd3;
+        font-size: 0.86rem;
+      }
+
+      .app-shell {
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 82% -15%, rgba(14, 165, 233, 0.16), transparent 29rem),
+          var(--navy-950);
+      }
+
+      .topbar {
+        min-height: 76px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 14px 28px;
+        border-bottom: 1px solid var(--line-soft);
+        background: rgba(7, 17, 31, 0.88);
+        backdrop-filter: blur(14px);
+        position: sticky;
+        top: 0;
+        z-index: 5;
+      }
+
+      .brand, .sidebar-heading, .detail-heading, .chart-heading, .record-heading, .control-bar, .label-filter-bar, .toggle-row {
+        display: flex;
+        align-items: center;
+      }
+
+      .brand { gap: 13px; min-width: 0; }
+      .brand-mark {
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        color: #061524;
+        background: linear-gradient(135deg, #7dd3fc, #22d3ee);
+        font-size: 0.76rem;
+        font-weight: 850;
+        letter-spacing: 0.06em;
+      }
+
+      .brand h1, .record-heading h2, .chart-heading h3, .detail-heading h3, .sidebar-heading h2 { margin: 0; }
+      .brand h1 { font-size: 1.06rem; letter-spacing: -0.01em; }
+      .brand p { margin: 2px 0 0; color: var(--muted); font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+      .top-actions { display: flex; align-items: center; gap: 9px; }
+      .mode-note {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #bed0e6;
+        border: 1px solid var(--line);
+        background: rgba(16, 43, 72, 0.65);
+        border-radius: 999px;
+        padding: 7px 11px;
+        font-size: 0.76rem;
+        white-space: nowrap;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.12);
+      }
+
+      .outline-button, .secondary-button {
+        min-height: 39px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        padding: 7px 11px;
+        color: #cde0f3;
+        background: #102b48;
+        font-size: 0.8rem;
+        font-weight: 650;
+      }
+
+      .outline-button:hover, .outline-button:focus-visible, .secondary-button:hover, .secondary-button:focus-visible {
+        border-color: var(--cyan);
+        color: white;
+        outline: none;
+      }
+
+      .secondary-button:disabled { opacity: 0.42; cursor: not-allowed; }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: 292px minmax(0, 1fr);
+        min-height: calc(100vh - 76px);
+      }
+
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        border-right: 1px solid var(--line-soft);
+        background: rgba(8, 24, 42, 0.72);
+        padding: 22px 16px 16px;
+      }
+
+      .sidebar-heading { justify-content: space-between; padding: 0 4px 16px; }
+      .sidebar-heading h2 { font-size: 1.22rem; }
+      .icon-button {
+        width: 34px;
+        height: 34px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        color: var(--muted);
+        background: transparent;
+        font-size: 1.15rem;
+      }
+
+      .icon-button:hover, .icon-button:focus-visible { color: var(--ink); border-color: var(--cyan); outline: none; }
+      .search-field input, .jump-control input, .control-bar select {
+        width: 100%;
+        min-height: 39px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        color: var(--ink);
+        background: #0a1a2d;
+        padding: 8px 10px;
+        outline: none;
+      }
+
+      .search-field input:focus, .jump-control input:focus, .control-bar select:focus {
+        border-color: var(--cyan);
+        box-shadow: 0 0 0 3px var(--cyan-soft);
+      }
+
+      .filter-section { padding: 18px 4px 10px; }
+      .check-list { display: grid; gap: 8px; margin-top: 10px; }
+      .filter-check, .toggle-row { color: #c4d4e7; font-size: 0.84rem; }
+      .filter-check { display: flex; align-items: center; gap: 8px; }
+      .filter-check input, .toggle-row input { accent-color: var(--cyan); }
+      .filter-count { margin-left: auto; color: var(--faint); font-variant-numeric: tabular-nums; }
+      .toggle-row { gap: 9px; margin: 4px; padding: 12px 0; border-top: 1px solid var(--line-soft); }
+      .filter-result { min-height: 20px; margin: 6px 4px 10px; color: var(--faint); font-size: 0.75rem; }
+
+      .record-list { min-height: 0; flex: 1; overflow: auto; padding: 2px 2px 8px; }
+      .record-item {
+        width: 100%;
+        display: grid;
+        gap: 5px;
+        padding: 11px 10px;
+        margin: 0 0 5px;
+        border: 1px solid transparent;
+        border-radius: 9px;
+        color: inherit;
+        text-align: left;
+        background: transparent;
+      }
+
+      .record-item:hover, .record-item:focus-visible {
+        border-color: var(--line);
+        background: rgba(18, 48, 79, 0.72);
+        outline: none;
+      }
+
+      .record-item.is-selected {
+        border-color: rgba(56, 189, 248, 0.55);
+        background: linear-gradient(90deg, rgba(14, 165, 233, 0.16), rgba(14, 165, 233, 0.04));
+      }
+
+      .record-item-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .record-item strong { font-size: 0.88rem; font-weight: 700; }
+      .record-item small { color: var(--faint); font-size: 0.72rem; }
+      .source-pill, .chip, .count-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        font-size: 0.69rem;
+        font-weight: 700;
+        line-height: 1;
+        white-space: nowrap;
+      }
+
+      .source-pill { padding: 4px 6px; color: #a8dcf5; background: rgba(56, 189, 248, 0.11); }
+      .source-pill.processed { color: #dfc8ff; background: rgba(139, 92, 246, 0.14); }
+
+      .main-panel { min-width: 0; padding: 28px clamp(20px, 3vw, 46px) 42px; }
+      .center-state {
+        min-height: 62vh;
+        display: grid;
+        align-content: center;
+        justify-items: center;
+        gap: 10px;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      .center-state p { margin: 0; }
+      .state-title { color: var(--ink); font-size: 1.04rem; font-weight: 700; }
+      .state-copy { max-width: 520px; color: var(--muted); font-size: 0.9rem; }
+      .pulse-ring {
+        width: 30px;
+        height: 30px;
+        border: 3px solid rgba(56, 189, 248, 0.2);
+        border-top-color: var(--cyan);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      .record-heading { justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 22px; }
+      .record-heading h2 { margin-top: 4px; font-size: clamp(1.5rem, 2vw, 2rem); letter-spacing: -0.025em; }
+      .chip-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+      .chip { padding: 6px 8px; color: #c6d7eb; border: 1px solid var(--line); background: rgba(15, 43, 72, 0.6); }
+      .chip.is-warning { color: #fde68a; border-color: rgba(251, 191, 36, 0.38); background: rgba(251, 191, 36, 0.1); }
+      .chip.is-danger { color: #fecdd3; border-color: rgba(251, 113, 133, 0.36); background: rgba(251, 113, 133, 0.1); }
+
+      .record-metrics {
+        display: flex;
+        align-items: stretch;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        overflow: hidden;
+        background: rgba(9, 29, 50, 0.66);
+      }
+
+      .record-metrics div { min-width: 91px; padding: 10px 13px; border-left: 1px solid var(--line); }
+      .record-metrics div:first-child { border-left: 0; }
+      .record-metrics span, .record-metrics strong { display: block; }
+      .record-metrics span { color: var(--faint); font-size: 0.66rem; letter-spacing: 0.06em; }
+      .record-metrics strong { margin-top: 3px; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+
+      .control-bar {
+        justify-content: space-between;
+        gap: 18px;
+        padding: 12px;
+        margin-bottom: 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(10, 30, 51, 0.7);
+      }
+
+      .time-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; }
+      .time-controls label { display: grid; gap: 4px; min-width: 95px; color: var(--muted); font-size: 0.69rem; font-weight: 650; }
+      .time-controls label span { margin-left: 1px; }
+      .jump-control { position: relative; }
+      .jump-control input { min-width: 90px; padding-right: 29px; }
+      .jump-control em { position: absolute; right: 10px; bottom: 10px; color: var(--faint); font-size: 0.72rem; font-style: normal; }
+      .cursor-readout { margin: 0; color: var(--muted); font-size: 0.75rem; text-align: right; }
+
+      .label-filter-bar { gap: 12px; padding: 5px 1px 15px; color: var(--muted); font-size: 0.76rem; }
+      .label-filter-list { display: flex; flex-wrap: wrap; gap: 6px; }
+      .label-filter {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 28px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 4px 8px;
+        color: #adc0d5;
+        background: rgba(10, 28, 47, 0.62);
+        font-size: 0.71rem;
+      }
+
+      .label-filter input { accent-color: var(--label-color); }
+      .label-filter.is-off { opacity: 0.5; }
+      .charts { display: grid; gap: 14px; }
+      .chart-card, .detail-card {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: linear-gradient(145deg, rgba(13, 37, 63, 0.88), rgba(8, 24, 42, 0.94));
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+      }
+
+      .chart-card { overflow: hidden; }
+      .chart-heading { justify-content: space-between; padding: 15px 18px 8px; }
+      .chart-kicker { color: #7289a5; font-size: 0.63rem; }
+      .chart-heading h3 { margin-top: 2px; font-size: 1rem; }
+      .axis-unit { color: var(--faint); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.72rem; }
+      .signal-canvas { display: block; width: 100%; height: 238px; touch-action: none; }
+
+      .detail-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.8fr); gap: 14px; margin-top: 14px; }
+      .detail-card { min-width: 0; padding: 17px; }
+      .detail-heading { justify-content: space-between; gap: 12px; margin-bottom: 13px; }
+      .detail-heading h3 { margin-top: 3px; font-size: 1rem; }
+      .count-badge { justify-content: center; min-width: 26px; padding: 6px 8px; color: #a8dcf5; background: var(--cyan-soft); }
+
+      .legend { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 0 0 12px; border-bottom: 1px solid var(--line-soft); }
+      .legend-item { display: inline-flex; align-items: center; gap: 6px; color: #9db0c6; font-size: 0.72rem; }
+      .legend-swatch { width: 9px; height: 9px; border-radius: 50%; }
+      .label-list { max-height: 285px; overflow: auto; }
+      .label-row {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 8px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 2px;
+        border: 0;
+        border-bottom: 1px solid var(--line-soft);
+        color: inherit;
+        text-align: left;
+        background: transparent;
+      }
+
+      .label-row:hover, .label-row:focus-visible { background: rgba(56, 189, 248, 0.06); outline: none; }
+      .label-row:last-child { border-bottom: 0; }
+      .label-color { width: 8px; min-height: 32px; border-radius: 999px; }
+      .label-row strong, .label-row small { display: block; }
+      .label-row strong { font-size: 0.82rem; }
+      .label-row small { margin-top: 2px; color: var(--muted); font-size: 0.71rem; }
+      .label-flags { display: grid; justify-items: end; gap: 3px; }
+      .tiny-flag { color: var(--faint); font-size: 0.66rem; }
+      .tiny-flag.recheck { color: #fde68a; }
+      .empty-list { padding: 22px 2px 8px; color: var(--faint); font-size: 0.82rem; }
+
+      .quality-list { display: grid; gap: 0; margin: 0; }
+      .quality-list div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
+      .quality-list div:last-child { border-bottom: 0; }
+      .quality-list dt { color: var(--muted); font-size: 0.76rem; }
+      .quality-list dd { margin: 0; color: #cfe1f4; font-size: 0.78rem; font-weight: 650; text-align: right; font-variant-numeric: tabular-nums; }
+
+      @media (max-width: 1000px) {
+        .workspace { grid-template-columns: 246px minmax(0, 1fr); }
+        .record-heading, .control-bar { align-items: flex-start; flex-direction: column; }
+        .cursor-readout { text-align: left; }
+        .detail-grid { grid-template-columns: 1fr; }
+      }
+
+      @media (max-width: 760px) {
+        .topbar { min-height: 68px; padding: 12px 16px; }
+        .brand-mark { width: 36px; height: 36px; border-radius: 10px; }
+        .brand p, .mode-note { display: none; }
+        .workspace { display: block; }
+        .sidebar { min-height: 280px; border-right: 0; border-bottom: 1px solid var(--line-soft); }
+        .record-list { max-height: 180px; }
+        .main-panel { padding: 22px 16px 30px; }
+        .record-metrics { width: 100%; }
+        .record-metrics div { flex: 1; min-width: 0; }
+        .signal-canvas { height: 210px; }
+        .label-filter-bar { align-items: flex-start; flex-direction: column; }
+        .top-actions .outline-button { min-height: 34px; padding: 6px 8px; }
+      }
+
+      /* Presentation light theme: charts remain clean when captured for slides. */
+      :root {
+        color-scheme: light;
+        --ink: #10243a;
+        --muted: #566a82;
+        --faint: #7b8da2;
+        --navy-950: #f4f7fb;
+        --navy-900: #ffffff;
+        --navy-850: #f8fbfe;
+        --line: #d5e0ea;
+        --line-soft: #e6edf3;
+        --cyan: #0786c8;
+        --cyan-soft: rgba(7, 134, 200, 0.12);
+        --green: #18a971;
+      }
+
+      html, body { background: #f4f7fb; }
+
+      .landing {
+        background:
+          radial-gradient(circle at 84% 8%, rgba(14, 165, 233, 0.16), transparent 27rem),
+          radial-gradient(circle at 12% 90%, rgba(125, 211, 252, 0.16), transparent 30rem),
+          #f4f7fb;
+      }
+
+      .landing-card {
+        border-color: #d7e4ee;
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 24px 60px rgba(43, 76, 108, 0.12);
+      }
+
+      .app-shell {
+        height: 100vh;
+        min-height: 0;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 82% -15%, rgba(125, 211, 252, 0.16), transparent 29rem),
+          #f4f7fb;
+      }
+
+      .topbar {
+        height: 76px;
+        min-height: 76px;
+        border-bottom-color: #dbe6ef;
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 3px 14px rgba(48, 77, 105, 0.05);
+      }
+
+      .brand p { color: #62758c; }
+
+      .mode-note {
+        color: #486078;
+        border-color: #cfe0ec;
+        background: #f3f8fc;
+      }
+
+      .outline-button, .secondary-button {
+        color: #21516f;
+        border-color: #c6dbe9;
+        background: #edf6fb;
+      }
+
+      .outline-button:hover, .outline-button:focus-visible,
+      .secondary-button:hover, .secondary-button:focus-visible {
+        border-color: #0786c8;
+        color: #063e60;
+        background: #e1f2fb;
+      }
+
+      .workspace {
+        height: calc(100vh - 76px);
+        min-height: 0;
+      }
+
+      .sidebar {
+        height: calc(100vh - 76px);
+        min-height: 0;
+        overflow: hidden;
+        border-right-color: #dbe6ef;
+        background: rgba(255, 255, 255, 0.9);
+      }
+
+      .icon-button {
+        color: #59718a;
+        border-color: #c9dce9;
+        background: #f7fbfe;
+      }
+
+      .search-field input, .jump-control input, .control-bar select {
+        color: #142e45;
+        border-color: #cbdbe7;
+        background: #ffffff;
+      }
+
+      .filter-check, .toggle-row { color: #344f68; }
+      .toggle-row { border-top-color: #e1ebf2; }
+      .sidebar-heading { padding-bottom: 12px; }
+      .filter-result { margin: 8px 4px 6px; }
+
+      .record-list {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+        scrollbar-color: #a8c2d3 transparent;
+        padding-top: 0;
+      }
+
+      .record-list::-webkit-scrollbar { width: 10px; }
+      .record-list::-webkit-scrollbar-thumb {
+        border: 3px solid transparent;
+        border-radius: 999px;
+        background: #a8c2d3;
+        background-clip: padding-box;
+      }
+
+      .record-item:hover, .record-item:focus-visible {
+        border-color: #cfe0eb;
+        background: #f3f8fc;
+      }
+
+      .record-item.is-selected {
+        border-color: #4ca6d2;
+        background: linear-gradient(90deg, #e6f5fc, #f7fbfe);
+      }
+
+      .record-item small { color: #73879b; }
+
+      .source-pill {
+        color: #14618b;
+        background: #e0f2fb;
+      }
+
+      .source-pill.processed {
+        color: #65439a;
+        background: #f0e9fb;
+      }
+
+      .main-panel {
+        height: calc(100vh - 76px);
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
+
+      .center-state { color: #5d7187; }
+
+      .record-metrics {
+        border-color: #cfe0eb;
+        background: #ffffff;
+        box-shadow: 0 6px 20px rgba(40, 72, 101, 0.06);
+      }
+
+      .record-metrics div { border-left-color: #dce8f0; }
+      .record-metrics strong { color: #15324a; }
+
+      .control-bar {
+        border-color: #cfe0eb;
+        background: #ffffff;
+        box-shadow: 0 6px 20px rgba(40, 72, 101, 0.05);
+      }
+
+      .cursor-readout { color: #60758b; }
+
+      .label-filter {
+        color: #48637a;
+        border-color: #cfdee9;
+        background: #ffffff;
+      }
+
+      .chart-card, .detail-card {
+        border-color: #cfdee9;
+        background: #ffffff;
+        box-shadow: 0 10px 24px rgba(43, 76, 108, 0.08);
+      }
+
+      .chart-heading { background: #ffffff; }
+      .signal-canvas { background: #ffffff; }
+      .axis-unit { color: #71859a; }
+
+      .chip {
+        color: #42617a;
+        border-color: #ccdde8;
+        background: #f5f9fc;
+      }
+
+      .chip.is-warning {
+        color: #8a5c00;
+        border-color: #f2d08a;
+        background: #fff8e6;
+      }
+
+      .chip.is-danger {
+        color: #a33143;
+        border-color: #f0b8c0;
+        background: #fff1f3;
+      }
+
+      .legend { border-bottom-color: #e5edf3; }
+      .legend-item { color: #526b81; }
+      .label-row { border-bottom-color: #e6edf3; }
+      .label-row:hover, .label-row:focus-visible { background: #f5faff; }
+      .label-row small { color: #687d93; }
+      .quality-list div { border-bottom-color: #e5edf3; }
+      .quality-list dt { color: #60758b; }
+      .quality-list dd { color: #244259; }
+
+      .record-hospital-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin: 14px 4px 7px;
+        padding-top: 12px;
+        border-top: 1px solid #e1ebf2;
+        color: #3d5c75;
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+      }
+
+      .record-hospital-heading:first-child {
+        margin-top: 0;
+        padding-top: 0;
+        border-top: 0;
+      }
+
+      .record-variant-heading {
+        margin: 4px 6px 5px;
+        color: #7b8fa2;
+        font-size: 0.68rem;
+        font-weight: 760;
+        letter-spacing: 0.07em;
+      }
+
+      .compact-filter-panel {
+        flex: 0 0 auto;
+        max-height: 232px;
+        margin-top: 8px;
+        padding: 10px 4px 2px;
+        overflow-y: auto;
+        border-top: 1px solid #dfe9f1;
+        background: linear-gradient(180deg, rgba(248, 251, 253, 0.64), rgba(248, 251, 253, 0));
+        scrollbar-color: #b3c9d8 transparent;
+      }
+
+      .compact-filter-panel .check-list {
+        gap: 0;
+        margin-top: 5px;
+      }
+
+      .compact-filter-panel .toggle-row {
+        min-height: 31px;
+        margin: 5px 0 0;
+        padding: 7px 0 2px;
+        font-size: 0.77rem;
+      }
+
+      .hospital-filter-group {
+        display: grid;
+        gap: 2px;
+        padding: 5px 0;
+        border-bottom: 1px solid #e5edf3;
+      }
+
+      .hospital-filter-group:last-child { border-bottom: 0; }
+      .hospital-filter-title { font-size: 0.78rem; font-weight: 760; }
+
+      .variant-filter-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 12px;
+        padding-left: 25px;
+      }
+
+      .variant-filter-list .filter-check { color: #64798e; font-size: 0.74rem; }
+      .variant-filter-list .filter-count { margin-left: 3px; }
+
+      .duration-filter {
+        margin-top: 7px;
+        padding: 8px 0 5px;
+        border-top: 1px solid #e1ebf2;
+      }
+
+      .duration-filter-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .duration-index-button {
+        min-height: 26px;
+        border: 1px solid #c8dce9;
+        border-radius: 7px;
+        padding: 4px 7px;
+        color: #2d617f;
+        background: #f4f9fc;
+        font-size: 0.7rem;
+        font-weight: 720;
+      }
+
+      .duration-index-button:hover:not(:disabled),
+      .duration-index-button:focus-visible:not(:disabled) {
+        border-color: #4ca6d2;
+        color: #0c527d;
+        background: #e8f5fb;
+        outline: none;
+      }
+
+      .duration-index-button:disabled { opacity: 0.62; cursor: wait; }
+
+      .duration-inputs {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        align-items: center;
+        gap: 6px;
+        margin-top: 7px;
+      }
+
+      .duration-inputs label {
+        position: relative;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 4px;
+        color: #60758b;
+        font-size: 0.69rem;
+        font-weight: 660;
+      }
+
+      .duration-inputs input {
+        width: 100%;
+        min-width: 0;
+        min-height: 28px;
+        border: 1px solid #cbdbe7;
+        border-radius: 7px;
+        padding: 4px 22px 4px 6px;
+        color: #173249;
+        background: #ffffff;
+        font-size: 0.72rem;
+        outline: none;
+      }
+
+      .duration-inputs input:focus {
+        border-color: #0786c8;
+        box-shadow: 0 0 0 2px rgba(7, 134, 200, 0.1);
+      }
+
+      .duration-inputs input:disabled {
+        color: #8da0b0;
+        background: #f3f7fa;
+      }
+
+      .duration-inputs em {
+        position: absolute;
+        right: 6px;
+        color: #778ca0;
+        font-size: 0.65rem;
+        font-style: normal;
+      }
+
+      .duration-divider { color: #91a3b3; font-size: 0.78rem; }
+      .duration-index-status { margin: 5px 0 0; color: #74899d; font-size: 0.67rem; line-height: 1.35; }
+
+      .case-navigation {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-top: 13px;
+      }
+
+      .case-navigation .secondary-button {
+        min-height: 32px;
+        padding: 5px 8px;
+        font-size: 0.74rem;
+      }
+
+      .record-position {
+        color: #63788c;
+        font-size: 0.72rem;
+        font-variant-numeric: tabular-nums;
+      }
+
+      @media (max-width: 760px) {
+        .app-shell { height: auto; overflow: visible; }
+        .topbar { height: 68px; min-height: 68px; }
+        .workspace { height: auto; }
+        .sidebar {
+          height: auto;
+          overflow: visible;
+          border-right: 0;
+          border-bottom: 1px solid #dbe6ef;
+        }
+        .record-list { max-height: min(42vh, 360px); }
+        .compact-filter-panel { max-height: none; }
+        .main-panel { height: auto; overflow: visible; }
+      }
+    </style>
+  </head>
+  <body>
+    <input id="folderInput" type="file" webkitdirectory directory multiple class="sr-only">
+
+    <section id="landing" class="landing">
+      <div class="landing-card">
+        <div class="landing-mark" aria-hidden="true">FHR</div>
+        <p class="eyebrow">LOCAL · READ-ONLY</p>
+        <h1>FHR Signal Viewer</h1>
+        <p class="landing-copy">압축을 풀어둔 FHR 데이터 상위 폴더를 선택하면 FHR·UC 파형과 패턴 Label을 이 브라우저 안에서 열람할 수 있습니다.</p>
+        <label class="folder-button" for="folderInput">데이터 폴더 선택</label>
+        <p class="landing-note">CSV와 JSON은 레코드를 열 때만 읽으며, 데이터는 업로드·수정·저장되지 않습니다.</p>
+        <p id="landingError" class="landing-error is-hidden"></p>
+      </div>
+    </section>
+
+    <div id="app" class="app-shell is-hidden">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">FHR</span>
+          <div>
+            <h1>FHR Signal Viewer</h1>
+            <p id="sourceName">선택한 폴더를 준비하는 중</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <label class="outline-button" for="folderInput">폴더 변경</label>
+          <div class="mode-note" title="선택한 데이터는 이 브라우저 밖으로 전송되지 않습니다.">
+            <span class="status-dot"></span>
+            Local · read-only
+          </div>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="sidebar" aria-label="레코드 탐색">
+          <div class="sidebar-heading">
+            <div>
+              <p class="eyebrow">RECORDS</p>
+              <h2 id="recordCount">불러오는 중</h2>
+            </div>
+            <button class="icon-button" id="clearSelectionButton" type="button" title="다른 폴더 선택" aria-label="다른 폴더 선택">↻</button>
+          </div>
+
+          <label class="search-field">
+            <span class="sr-only">레코드 ID 검색</span>
+            <input id="searchInput" type="search" autocomplete="off" placeholder="레코드 ID 검색">
+          </label>
+
+          <p id="filterResult" class="filter-result"></p>
+          <div id="recordList" class="record-list" role="listbox" aria-label="레코드 목록"></div>
+
+          <section class="filter-section compact-filter-panel" aria-label="병원 및 Label 필터">
+            <p class="filter-label">병원 / 버전</p>
+            <div id="datasetFilters" class="check-list"></div>
+            <div class="duration-filter">
+              <div class="duration-filter-heading">
+                <span class="filter-label">길이</span>
+                <button id="durationIndexButton" class="duration-index-button" type="button">길이 정보 준비</button>
+              </div>
+              <div class="duration-inputs">
+                <label>
+                  <span>최소</span>
+                  <input id="minDurationInput" type="number" min="0" step="1" inputmode="numeric" placeholder="0" disabled>
+                  <em>분</em>
+                </label>
+                <span class="duration-divider">–</span>
+                <label>
+                  <span>최대</span>
+                  <input id="maxDurationInput" type="number" min="0" step="1" inputmode="numeric" placeholder="제한 없음" disabled>
+                  <em>분</em>
+                </label>
+              </div>
+              <p id="durationIndexStatus" class="duration-index-status">길이별 필터를 사용하려면 길이 정보를 준비하세요.</p>
+            </div>
+            <label class="toggle-row">
+              <input id="labelsOnly" type="checkbox">
+              <span>Label JSON이 있는 레코드만</span>
+            </label>
+          </section>
+        </aside>
+
+        <main class="main-panel">
+          <section id="loadingState" class="center-state">
+            <div class="pulse-ring" aria-hidden="true"></div>
+            <p id="loadingMessage">데이터 목록을 준비하고 있습니다.</p>
+          </section>
+
+          <section id="errorState" class="center-state is-hidden" role="alert">
+            <p class="state-title">데이터를 불러오지 못했습니다.</p>
+            <p id="errorMessage" class="state-copy"></p>
+          </section>
+
+          <section id="emptyState" class="center-state is-hidden">
+            <p class="state-title">표시할 레코드가 없습니다.</p>
+            <p class="state-copy">검색어 또는 필터를 조정해 주세요.</p>
+          </section>
+
+          <section id="viewer" class="viewer is-hidden" aria-live="polite">
+            <div class="record-heading">
+              <div>
+                <p class="eyebrow" id="recordContext">RECORD</p>
+                <h2 id="recordTitle">—</h2>
+                <div id="recordChips" class="chip-row"></div>
+                <div class="case-navigation" aria-label="필터 결과 순서 탐색">
+                  <button id="previousRecordButton" class="secondary-button" type="button">← 이전 케이스</button>
+                  <span id="recordPosition" class="record-position">필터 결과 —</span>
+                  <button id="nextRecordButton" class="secondary-button" type="button">다음 케이스 →</button>
+                </div>
+              </div>
+              <div class="record-metrics">
+                <div>
+                  <span>길이</span>
+                  <strong id="durationMetric">—</strong>
+                </div>
+                <div>
+                  <span>샘플</span>
+                  <strong id="sampleMetric">—</strong>
+                </div>
+                <div>
+                  <span>Label</span>
+                  <strong id="labelMetric">—</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="control-bar">
+              <div class="time-controls">
+                <button id="previousButton" class="secondary-button" type="button">← 이전</button>
+                <label>
+                  <span>표시 구간</span>
+                  <select id="windowSelect">
+                    <option value="5">5분</option>
+                    <option value="10" selected>10분</option>
+                    <option value="30">30분</option>
+                  </select>
+                </label>
+                <label class="jump-control">
+                  <span>이동 시점</span>
+                  <input id="jumpInput" type="number" inputmode="decimal" min="0" step="0.1" value="0">
+                  <em>분</em>
+                </label>
+                <button id="jumpButton" class="secondary-button" type="button">이동</button>
+                <button id="nextButton" class="secondary-button" type="button">다음 →</button>
+              </div>
+              <p id="cursorReadout" class="cursor-readout">파형 위에 마우스를 올리면 시점과 값을 확인할 수 있습니다.</p>
+            </div>
+
+            <div class="label-filter-bar">
+              <span>Label 표시</span>
+              <div id="labelFilters" class="label-filter-list"></div>
+            </div>
+
+            <div class="charts">
+              <article class="chart-card">
+                <div class="chart-heading">
+                  <div>
+                    <p class="chart-kicker">FETAL HEART RATE</p>
+                    <h3>FHR</h3>
+                  </div>
+                  <span class="axis-unit">bpm</span>
+                </div>
+                <canvas id="fhrCanvas" class="signal-canvas" aria-label="FHR 파형"></canvas>
+              </article>
+
+              <article class="chart-card">
+                <div class="chart-heading">
+                  <div>
+                    <p class="chart-kicker">UTERINE ACTIVITY</p>
+                    <h3>UC / TOCO</h3>
+                  </div>
+                  <span class="axis-unit">value</span>
+                </div>
+                <canvas id="ucCanvas" class="signal-canvas" aria-label="UC 또는 TOCO 파형"></canvas>
+              </article>
+            </div>
+
+            <div class="detail-grid">
+              <section class="detail-card">
+                <div class="detail-heading">
+                  <div>
+                    <p class="eyebrow">PATTERN LABELS</p>
+                    <h3>현재 구간의 Label</h3>
+                  </div>
+                  <span id="labelWindowCount" class="count-badge">0</span>
+                </div>
+                <div id="labelLegend" class="legend"></div>
+                <div id="labelList" class="label-list"></div>
+              </section>
+
+              <section class="detail-card">
+                <div class="detail-heading">
+                  <div>
+                    <p class="eyebrow">RECORD STATUS</p>
+                    <h3>데이터 품질</h3>
+                  </div>
+                </div>
+                <dl id="qualityList" class="quality-list"></dl>
+              </section>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        var LABEL_TYPES = {
+          "1": { key: "acc", name: "Acceleration", color: "#22c55e" },
+          "2": { key: "dec_var", name: "Variable deceleration", color: "#f97316" },
+          "3": { key: "dec_early", name: "Early deceleration", color: "#f59e0b" },
+          "4": { key: "dec_late", name: "Late deceleration", color: "#ef4444" },
+          "5": { key: "dec_prol", name: "Prolonged deceleration", color: "#be123c" },
+          "6": { key: "uc", name: "Uterine contraction", color: "#8b5cf6" },
+          "7": { key: "dec_spon", name: "Spontaneous deceleration", color: "#ec4899" },
+          "8": { key: "long_acc", name: "Prolonged acceleration", color: "#14b8a6" },
+          "9": { key: "sinu", name: "Sinusoidal pattern", color: "#0ea5e9" },
+          "10": { key: "other", name: "Other / excluded", color: "#64748b" }
+        };
+
+        var elements = {
+          folderInput: document.getElementById("folderInput"),
+          landing: document.getElementById("landing"),
+          app: document.getElementById("app"),
+          landingError: document.getElementById("landingError"),
+          sourceName: document.getElementById("sourceName"),
+          recordCount: document.getElementById("recordCount"),
+          clearSelectionButton: document.getElementById("clearSelectionButton"),
+          searchInput: document.getElementById("searchInput"),
+          datasetFilters: document.getElementById("datasetFilters"),
+          labelsOnly: document.getElementById("labelsOnly"),
+          minDurationInput: document.getElementById("minDurationInput"),
+          maxDurationInput: document.getElementById("maxDurationInput"),
+          durationIndexButton: document.getElementById("durationIndexButton"),
+          durationIndexStatus: document.getElementById("durationIndexStatus"),
+          filterResult: document.getElementById("filterResult"),
+          recordList: document.getElementById("recordList"),
+          loadingState: document.getElementById("loadingState"),
+          loadingMessage: document.getElementById("loadingMessage"),
+          errorState: document.getElementById("errorState"),
+          errorMessage: document.getElementById("errorMessage"),
+          emptyState: document.getElementById("emptyState"),
+          viewer: document.getElementById("viewer"),
+          recordContext: document.getElementById("recordContext"),
+          recordTitle: document.getElementById("recordTitle"),
+          recordChips: document.getElementById("recordChips"),
+          durationMetric: document.getElementById("durationMetric"),
+          sampleMetric: document.getElementById("sampleMetric"),
+          labelMetric: document.getElementById("labelMetric"),
+          previousRecordButton: document.getElementById("previousRecordButton"),
+          nextRecordButton: document.getElementById("nextRecordButton"),
+          recordPosition: document.getElementById("recordPosition"),
+          previousButton: document.getElementById("previousButton"),
+          nextButton: document.getElementById("nextButton"),
+          windowSelect: document.getElementById("windowSelect"),
+          jumpInput: document.getElementById("jumpInput"),
+          jumpButton: document.getElementById("jumpButton"),
+          cursorReadout: document.getElementById("cursorReadout"),
+          labelFilters: document.getElementById("labelFilters"),
+          fhrCanvas: document.getElementById("fhrCanvas"),
+          ucCanvas: document.getElementById("ucCanvas"),
+          labelLegend: document.getElementById("labelLegend"),
+          labelList: document.getElementById("labelList"),
+          labelWindowCount: document.getElementById("labelWindowCount"),
+          qualityList: document.getElementById("qualityList")
+        };
+
+        var state = {
+          catalog: null,
+          currentKey: null,
+          detail: null,
+          series: null,
+          startMs: 0,
+          windowMinutes: 10,
+          selectedSources: new Set(),
+          selectedLabelTypes: new Set(),
+          recordRenderLimit: 500,
+          durationIndexState: "idle",
+          durationIndexCompleted: 0,
+          durationIndexKnown: 0,
+          durationIndexSerial: 0,
+          durationColumnPromises: new Map(),
+          signalCache: new Map(),
+          requestSerial: 0,
+          folderSerial: 0,
+          resizeTimer: null
+        };
+
+        var formatter = new Intl.NumberFormat("ko-KR");
+        var ignoredParts = new Set([".ipynb_checkpoints", "__MACOSX", ".git", ".DS_Store"]);
+
+        function create(tag, className, text) {
+          var item = document.createElement(tag);
+          if (className) {
+            item.className = className;
+          }
+          if (text !== undefined && text !== null) {
+            item.textContent = text;
+          }
+          return item;
+        }
+
+        function clear(element) {
+          while (element.firstChild) {
+            element.removeChild(element.firstChild);
+          }
+        }
+
+        function setHidden(element, hidden) {
+          element.classList.toggle("is-hidden", hidden);
+        }
+
+        function showOnly(name) {
+          setHidden(elements.loadingState, name !== "loading");
+          setHidden(elements.errorState, name !== "error");
+          setHidden(elements.emptyState, name !== "empty");
+          setHidden(elements.viewer, name !== "viewer");
+        }
+
+        function nextPaint() {
+          return new Promise(function (resolve) {
+            window.requestAnimationFrame(function () {
+              window.setTimeout(resolve, 0);
+            });
+          });
+        }
+
+        function normalizePath(path) {
+          return String(path || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+        }
+
+        function dirname(path) {
+          var normalized = normalizePath(path);
+          var separator = normalized.lastIndexOf("/");
+          return separator < 0 ? "" : normalized.slice(0, separator);
+        }
+
+        function basename(path) {
+          var normalized = normalizePath(path);
+          var separator = normalized.lastIndexOf("/");
+          return separator < 0 ? normalized : normalized.slice(separator + 1);
+        }
+
+        function parentOrRoot(path) {
+          var parent = dirname(path);
+          return parent || ".";
+        }
+
+        function hasIgnoredPart(path) {
+          return normalizePath(path).split("/").some(function (part) {
+            return ignoredParts.has(part);
+          });
+        }
+
+        function parseNumber(value) {
+          if (value === null || value === undefined) {
+            return null;
+          }
+          if (typeof value === "number") {
+            return Number.isFinite(value) ? value : null;
+          }
+          var text = String(value).trim();
+          if (!text) {
+            return null;
+          }
+          var number = Number(text);
+          return Number.isFinite(number) ? number : null;
+        }
+
+        function parseBool(value) {
+          if (value === null || value === undefined || value === "") {
+            return null;
+          }
+          if (typeof value === "boolean") {
+            return value;
+          }
+          return ["1", "true", "yes", "y"].indexOf(String(value).trim().toLowerCase()) >= 0;
+        }
+
+        function splitCsvLine(line) {
+          var values = [];
+          var value = "";
+          var quoted = false;
+          for (var index = 0; index < line.length; index += 1) {
+            var character = line.charAt(index);
+            if (character === "\"") {
+              if (quoted && line.charAt(index + 1) === "\"") {
+                value += "\"";
+                index += 1;
+              } else {
+                quoted = !quoted;
+              }
+            } else if (character === "," && !quoted) {
+              values.push(value);
+              value = "";
+            } else {
+              value += character;
+            }
+          }
+          values.push(value);
+          return values;
+        }
+
+        function headerMap(headerLine) {
+          var headers = splitCsvLine(headerLine.replace(/^\uFEFF/, ""));
+          var map = {};
+          headers.forEach(function (header, index) {
+            var name = String(header || "").trim().toLowerCase();
+            if (name) {
+              map[name] = index;
+            }
+          });
+          return map;
+        }
+
+        function fieldAt(fields, index) {
+          return index === undefined ? null : fields[index];
+        }
+
+        function median(values) {
+          if (!values.length) {
+            return null;
+          }
+          var ordered = values.slice().sort(function (left, right) { return left - right; });
+          var middle = Math.floor(ordered.length / 2);
+          return ordered.length % 2 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) / 2;
+        }
+
+        function sourceId(dataset, variant) {
+          return dataset + "|" + variant;
+        }
+
+        function sourceLabel(dataset, variant) {
+          return dataset + (variant === "processed" ? " · Processed" : " · Raw");
+        }
+
+        function variantLabel(variant) {
+          return variant === "processed" ? "Processed" : "Raw";
+        }
+
+        function classForVariant(variant) {
+          return variant === "processed" ? " processed" : "";
+        }
+
+        function formatNumber(value) {
+          return formatter.format(Math.round(Number(value) || 0));
+        }
+
+        function formatPercent(value) {
+          if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+            return "—";
+          }
+          return Number(value).toFixed(2) + "%";
+        }
+
+        function formatClock(milliseconds) {
+          var totalSeconds = Math.max(0, Math.round((milliseconds || 0) / 1000));
+          var hours = Math.floor(totalSeconds / 3600);
+          var minutes = Math.floor((totalSeconds % 3600) / 60);
+          var seconds = totalSeconds % 60;
+          if (hours > 0) {
+            return String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0");
+          }
+          return String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0");
+        }
+
+        function formatDuration(milliseconds) {
+          var totalMinutes = Math.max(0, Math.round((milliseconds || 0) / 60000));
+          var hours = Math.floor(totalMinutes / 60);
+          var minutes = totalMinutes % 60;
+          return hours > 0 ? hours + "시간 " + minutes + "분" : minutes + "분";
+        }
+
+        function formatRange(start, end) {
+          return formatClock(start) + " – " + formatClock(end);
+        }
+
+        function labelStatusText(status) {
+          if (status === "available") {
+            return "Label 있음";
+          }
+          if (status === "empty") {
+            return "빈 Label JSON";
+          }
+          if (status === "invalid") {
+            return "읽을 수 없는 Label JSON";
+          }
+          return "Label 없음";
+        }
+
+        function currentWindowMs() {
+          return state.windowMinutes * 60000;
+        }
+
+        function classifyRecord(path, recordId) {
+          var context = normalizePath(path).toLowerCase();
+          var upperId = String(recordId || "").toUpperCase();
+          if (context.indexOf("processed") >= 0) {
+            return { dataset: "SNU", variant: "processed" };
+          }
+          if (context.indexOf("kmu") >= 0 || upperId.indexOf("KMU") === 0) {
+            return { dataset: "KMU", variant: "raw" };
+          }
+          if (context.indexOf("ihu") >= 0 || upperId.indexOf("NIA") === 0) {
+            return { dataset: "IHU/NIA", variant: "raw" };
+          }
+          if (context.indexOf("snu") >= 0 || upperId.indexOf("SNU") === 0 || /^\d+$/.test(String(recordId || ""))) {
+            return { dataset: "SNU", variant: "raw" };
+          }
+          return { dataset: "Unknown", variant: "raw" };
+        }
+
+        function matchRecordFile(name) {
+          var lower = String(name || "").toLowerCase();
+          var suffixes = [
+            ["_origin.csv", "originFile"],
+            ["_summary.csv", "summaryFile"],
+            [".json", "labelFile"],
+            [".cts", "ctsFile"]
+          ];
+          for (var index = 0; index < suffixes.length; index += 1) {
+            var suffix = suffixes[index][0];
+            if (lower.slice(-suffix.length) === suffix && name.length > suffix.length) {
+              return {
+                recordId: name.slice(0, name.length - suffix.length),
+                kind: suffixes[index][1]
+              };
+            }
+          }
+          return null;
+        }
+
+        function parseProcessingSummary(text) {
+          var lines = String(text || "").replace(/\r/g, "").split("\n");
+          if (!lines.length || !lines[0].trim()) {
+            return new Map();
+          }
+          var headers = headerMap(lines[0]);
+          if (headers.patient_id === undefined) {
+            return new Map();
+          }
+          var rows = new Map();
+          for (var index = 1; index < lines.length; index += 1) {
+            if (!lines[index].trim()) {
+              continue;
+            }
+            var fields = splitCsvLine(lines[index]);
+            var recordId = String(fieldAt(fields, headers.patient_id) || "").trim();
+            if (!recordId) {
+              continue;
+            }
+            rows.set(recordId, {
+              orig_valid: parseNumber(fieldAt(fields, headers.orig_valid)),
+              final_valid: parseNumber(fieldAt(fields, headers.final_valid)),
+              removed_n: parseNumber(fieldAt(fields, headers.removed_n)),
+              removed_pct: parseNumber(fieldAt(fields, headers.removed_pct))
+            });
+          }
+          return rows;
+        }
+
+        function recordSort(left, right) {
+          var order = { "IHU/NIA": 0, "KMU": 1, "SNU": 2, "Unknown": 3 };
+          var leftOrder = Object.prototype.hasOwnProperty.call(order, left.dataset) ? order[left.dataset] : 9;
+          var rightOrder = Object.prototype.hasOwnProperty.call(order, right.dataset) ? order[right.dataset] : 9;
+          var sourceDifference = leftOrder - rightOrder;
+          if (sourceDifference) {
+            return sourceDifference;
+          }
+          if (left.variant !== right.variant) {
+            return left.variant === "raw" ? -1 : 1;
+          }
+          var idDifference = left.record_id.localeCompare(right.record_id, undefined, { numeric: true });
+          return idDifference || left.key.localeCompare(right.key);
+        }
+
+        async function indexFolder(files, serial) {
+          var grouped = new Map();
+          var processingFiles = [];
+          var rootName = "";
+          var chunkSize = 1500;
+          var fileCount = files.length;
+
+          for (var index = 0; index < fileCount; index += 1) {
+            if (serial !== state.folderSerial) {
+              return null;
+            }
+            var file = files[index];
+            var relativePath = normalizePath(file.webkitRelativePath || file.name);
+            if (!relativePath || hasIgnoredPart(relativePath)) {
+              continue;
+            }
+            if (!rootName) {
+              rootName = relativePath.indexOf("/") >= 0 ? relativePath.split("/")[0] : "선택한 폴더";
+            }
+            var innerPath = relativePath.indexOf("/") >= 0 ? relativePath.slice(relativePath.indexOf("/") + 1) : file.name;
+            var name = basename(innerPath);
+            if (name.toLowerCase() === "_summary.csv") {
+              processingFiles.push({ file: file, parent: parentOrRoot(dirname(innerPath)) });
+              continue;
+            }
+            var match = matchRecordFile(name);
+            if (!match) {
+              continue;
+            }
+            var relativeDir = parentOrRoot(dirname(innerPath));
+            var lastSegment = relativeDir === "." ? "" : basename(relativeDir);
+            var key = lastSegment === match.recordId ? relativeDir : relativeDir + "::" + match.recordId;
+            var group = grouped.get(key);
+            if (!group) {
+              var classified = classifyRecord(innerPath, match.recordId);
+              group = {
+                key: key,
+                record_id: match.recordId,
+                relative_dir: relativeDir,
+                dataset: classified.dataset,
+                variant: classified.variant,
+                originFile: null,
+                summaryFile: null,
+                labelFile: null,
+                ctsFile: null,
+                processing_stats: null
+              };
+              grouped.set(key, group);
+            }
+            group[match.kind] = file;
+
+            if (index && index % chunkSize === 0) {
+              elements.loadingMessage.textContent = "파일 구조를 확인하고 있습니다. " + formatNumber(index) + " / " + formatNumber(fileCount);
+              await nextPaint();
+            }
+          }
+
+          var processingSummaries = new Map();
+          for (var summaryIndex = 0; summaryIndex < processingFiles.length; summaryIndex += 1) {
+            if (serial !== state.folderSerial) {
+              return null;
+            }
+            var summaryFile = processingFiles[summaryIndex];
+            try {
+              var summaryRows = parseProcessingSummary(await summaryFile.file.text());
+              if (summaryRows.size) {
+                processingSummaries.set(summaryFile.parent, summaryRows);
+              }
+            } catch (error) {
+              continue;
+            }
+          }
+
+          function findProcessingStats(record) {
+            var current = record.relative_dir;
+            while (true) {
+              var rows = processingSummaries.get(current);
+              if (rows && rows.has(record.record_id)) {
+                return rows.get(record.record_id);
+              }
+              if (current === ".") {
+                return null;
+              }
+              current = parentOrRoot(current);
+            }
+          }
+
+          var records = [];
+          grouped.forEach(function (record) {
+            if (!record.originFile && !record.summaryFile) {
+              return;
+            }
+            record.signal_source = record.summaryFile ? "summary.csv" : "origin.csv";
+            record.has_signal = true;
+            record.has_summary = Boolean(record.summaryFile);
+            record.has_origin = Boolean(record.originFile);
+            record.has_label_file = Boolean(record.labelFile);
+            record.has_cts = Boolean(record.ctsFile);
+            record.processing_stats = findProcessingStats(record);
+            records.push(record);
+          });
+          records.sort(recordSort);
+
+          var counts = new Map();
+          records.forEach(function (record) {
+            var source = sourceId(record.dataset, record.variant);
+            counts.set(source, (counts.get(source) || 0) + 1);
+          });
+          var datasets = [];
+          counts.forEach(function (count, source) {
+            var parts = source.split("|");
+            datasets.push({ dataset: parts[0], variant: parts[1], count: count });
+          });
+          datasets.sort(function (left, right) {
+            return recordSort(
+              { dataset: left.dataset, variant: left.variant, record_id: "", key: "" },
+              { dataset: right.dataset, variant: right.variant, record_id: "", key: "" }
+            );
+          });
+
+          return {
+            data_root_name: rootName || "선택한 폴더",
+            record_count: records.length,
+            records: records,
+            datasets: datasets,
+            label_types: LABEL_TYPES
+          };
+        }
+
+        function parseSignal(text) {
+          var lines = String(text || "").replace(/\r/g, "").split("\n");
+          if (!lines.length || !lines[0].trim()) {
+            throw new Error("신호 CSV에 헤더가 없습니다.");
+          }
+          var headers = headerMap(lines[0]);
+          var tmIndex = headers.tm;
+          var fhrIndex = headers.fhr1 === undefined ? headers.fhr : headers.fhr1;
+          var ucIndex = headers.uc === undefined ? headers.toco : headers.uc;
+          var cumulativeIndex = headers.cum_tm;
+          if (tmIndex === undefined || fhrIndex === undefined) {
+            throw new Error("신호 CSV에는 TM과 FHR1(FHR) 열이 필요합니다.");
+          }
+
+          var times = [];
+          var fhrs = [];
+          var ucs = [];
+          var intervalSample = [];
+          var currentTime = 0;
+
+          for (var lineIndex = 1; lineIndex < lines.length; lineIndex += 1) {
+            var line = lines[lineIndex];
+            if (!line.trim()) {
+              continue;
+            }
+            var fields = splitCsvLine(line);
+            var interval = parseNumber(fieldAt(fields, tmIndex));
+            var cumulative = cumulativeIndex === undefined ? null : parseNumber(fieldAt(fields, cumulativeIndex));
+            currentTime = cumulative === null ? currentTime + (interval || 0) : cumulative;
+            if (interval !== null && interval > 0 && intervalSample.length < 4096) {
+              intervalSample.push(interval);
+            }
+            times.push(currentTime);
+            fhrs.push(parseNumber(fieldAt(fields, fhrIndex)));
+            ucs.push(ucIndex === undefined ? null : parseNumber(fieldAt(fields, ucIndex)));
+          }
+
+          if (!times.length) {
+            throw new Error("신호 CSV에 데이터 행이 없습니다.");
+          }
+          return {
+            times: times,
+            fhrs: fhrs,
+            ucs: ucs,
+            duration_ms: times[times.length - 1] || 0,
+            expected_interval_ms: median(intervalSample) || 250
+          };
+        }
+
+        function updateSignalCache(key, signal) {
+          if (state.signalCache.has(key)) {
+            state.signalCache.delete(key);
+          }
+          state.signalCache.set(key, signal);
+          while (state.signalCache.size > 2) {
+            state.signalCache.delete(state.signalCache.keys().next().value);
+          }
+        }
+
+        async function readSignal(record) {
+          if (state.signalCache.has(record.key)) {
+            var cached = state.signalCache.get(record.key);
+            state.signalCache.delete(record.key);
+            state.signalCache.set(record.key, cached);
+            return cached;
+          }
+          var signalFile = record.summaryFile || record.originFile;
+          if (!signalFile) {
+            throw new Error("이 레코드에는 읽을 수 있는 신호 CSV가 없습니다.");
+          }
+          var signal = parseSignal(await signalFile.text());
+          updateSignalCache(record.key, signal);
+          return signal;
+        }
+
+        function normalizeLabelType(value) {
+          var raw = value === null || value === undefined ? "10" : String(value).trim();
+          var numeric = Number(raw);
+          if (Number.isInteger(numeric)) {
+            raw = String(numeric);
+          }
+          return LABEL_TYPES[raw] ? raw : "10";
+        }
+
+        async function readLabels(record) {
+          if (!record.labelFile) {
+            return { labels: [], source_metadata: {}, label_state: "absent" };
+          }
+          var payload;
+          try {
+            payload = JSON.parse(await record.labelFile.text());
+          } catch (error) {
+            return { labels: [], source_metadata: {}, label_state: "invalid" };
+          }
+          var metadata = {};
+          [
+            "hospital",
+            "patient",
+            "데이터생성일",
+            "최종수정일",
+            "origin_csv_file_name",
+            "summary_csv_file_name",
+            "origin_cts_name"
+          ].forEach(function (key) {
+            if (payload && payload[key] !== null && payload[key] !== undefined) {
+              metadata[key] = payload[key];
+            }
+          });
+
+          var labels = [];
+          var rawLabels = payload && Array.isArray(payload["labeling-data"]) ? payload["labeling-data"] : [];
+          rawLabels.forEach(function (raw) {
+            if (!raw || typeof raw !== "object") {
+              return;
+            }
+            var type = normalizeLabelType(raw.type);
+            var start = parseNumber(raw.start_ms);
+            var end = parseNumber(raw.end_ms);
+            if (start === null || end === null) {
+              return;
+            }
+            var definition = LABEL_TYPES[type];
+            labels.push({
+              id: raw.id === null || raw.id === undefined ? "" : String(raw.id),
+              type: type,
+              type_key: definition.key,
+              type_name: definition.name,
+              color: definition.color,
+              start_ms: start,
+              end_ms: end,
+              duration_ms: Math.max(0, end - start),
+              recheck: parseBool(raw.recheck_yn) === true,
+              review_green: parseBool(raw.review_green_yn),
+              review_red: parseBool(raw.review_red_yn),
+              final_label: raw.final_label === null || raw.final_label === undefined ? null : String(raw.final_label)
+            });
+          });
+          labels.sort(function (left, right) {
+            return left.start_ms - right.start_ms || left.end_ms - right.end_ms || Number(left.type) - Number(right.type);
+          });
+          return {
+            labels: labels,
+            source_metadata: metadata,
+            label_state: labels.length ? "available" : "empty"
+          };
+        }
+
+        function lowerBound(values, target) {
+          var low = 0;
+          var high = values.length;
+          while (low < high) {
+            var middle = Math.floor((low + high) / 2);
+            if (values[middle] < target) {
+              low = middle + 1;
+            } else {
+              high = middle;
+            }
+          }
+          return low;
+        }
+
+        function upperBound(values, target) {
+          var low = 0;
+          var high = values.length;
+          while (low < high) {
+            var middle = Math.floor((low + high) / 2);
+            if (values[middle] <= target) {
+              low = middle + 1;
+            } else {
+              high = middle;
+            }
+          }
+          return low;
+        }
+
+        function validFhr(value) {
+          return value !== null && value !== undefined && value >= 30;
+        }
+
+        function validUc(value) {
+          return value !== null && value !== undefined;
+        }
+
+        function downsampleSignal(signal, left, right, maxPoints) {
+          var count = Math.max(0, right - left);
+          if (!count) {
+            return [];
+          }
+          maxPoints = Math.max(200, Math.min(maxPoints || 5500, 12000));
+          var selected;
+          if (count <= maxPoints) {
+            selected = [];
+            for (var fullIndex = left; fullIndex < right; fullIndex += 1) {
+              selected.push(fullIndex);
+            }
+          } else {
+            var bins = Math.max(1, Math.floor(maxPoints / 4));
+            var step = Math.ceil(count / bins);
+            var chosen = new Set();
+            for (var start = left; start < right; start += step) {
+              var end = Math.min(right, start + step);
+              var minFhrIndex = -1;
+              var maxFhrIndex = -1;
+              var minUcIndex = -1;
+              var maxUcIndex = -1;
+              chosen.add(start);
+              chosen.add(end - 1);
+              for (var index = start; index < end; index += 1) {
+                var fhr = signal.fhrs[index];
+                var uc = signal.ucs[index];
+                if (validFhr(fhr)) {
+                  if (minFhrIndex < 0 || fhr < signal.fhrs[minFhrIndex]) {
+                    minFhrIndex = index;
+                  }
+                  if (maxFhrIndex < 0 || fhr > signal.fhrs[maxFhrIndex]) {
+                    maxFhrIndex = index;
+                  }
+                }
+                if (validUc(uc)) {
+                  if (minUcIndex < 0 || uc < signal.ucs[minUcIndex]) {
+                    minUcIndex = index;
+                  }
+                  if (maxUcIndex < 0 || uc > signal.ucs[maxUcIndex]) {
+                    maxUcIndex = index;
+                  }
+                }
+              }
+              if (minFhrIndex >= 0) {
+                chosen.add(minFhrIndex);
+                chosen.add(maxFhrIndex);
+              }
+              if (minUcIndex >= 0) {
+                chosen.add(minUcIndex);
+                chosen.add(maxUcIndex);
+              }
+            }
+            selected = Array.from(chosen).sort(function (leftIndex, rightIndex) { return leftIndex - rightIndex; });
+          }
+          return selected.map(function (index) {
+            return [signal.times[index], signal.fhrs[index], signal.ucs[index]];
+          });
+        }
+
+        function buildSeries(signal, startMs) {
+          var duration = Math.max(0, signal.duration_ms || 0);
+          var start = Math.max(0, Math.min(Number(startMs) || 0, duration));
+          var end = Math.max(start, Math.min(start + currentWindowMs(), duration));
+          var left = lowerBound(signal.times, start);
+          var right = upperBound(signal.times, end);
+          return {
+            window_start_ms: start,
+            window_end_ms: end,
+            duration_ms: duration,
+            expected_interval_ms: signal.expected_interval_ms,
+            source_point_count: Math.max(0, right - left),
+            point_count: 0,
+            points: downsampleSignal(signal, left, right, 5500)
+          };
+        }
+
+        function getVisibleLabels() {
+          if (!state.detail || !state.series) {
+            return [];
+          }
+          var start = state.series.window_start_ms;
+          var end = state.series.window_end_ms;
+          return state.detail.labels.filter(function (label) {
+            return state.selectedLabelTypes.has(label.type) && label.end_ms >= start && label.start_ms <= end;
+          });
+        }
+
+        function durationBounds() {
+          var minimum = parseNumber(elements.minDurationInput.value);
+          var maximum = parseNumber(elements.maxDurationInput.value);
+          return {
+            minimum_ms: minimum !== null && minimum >= 0 ? minimum * 60000 : null,
+            maximum_ms: maximum !== null && maximum >= 0 ? maximum * 60000 : null
+          };
+        }
+
+        function hasDurationFilter() {
+          var bounds = durationBounds();
+          return bounds.minimum_ms !== null || bounds.maximum_ms !== null;
+        }
+
+        function renderDurationControls() {
+          var isReady = state.durationIndexState === "ready";
+          var isIndexing = state.durationIndexState === "indexing";
+          elements.minDurationInput.disabled = !isReady;
+          elements.maxDurationInput.disabled = !isReady;
+          elements.durationIndexButton.disabled = isIndexing || isReady;
+
+          if (isIndexing) {
+            elements.durationIndexButton.textContent = "준비 중";
+            elements.durationIndexStatus.textContent =
+              "길이 정보 읽는 중 · " + formatNumber(state.durationIndexCompleted) + " / " + formatNumber(state.catalog ? state.catalog.record_count : 0);
+            return;
+          }
+          if (isReady) {
+            elements.durationIndexButton.textContent = "준비 완료";
+            elements.durationIndexStatus.textContent =
+              "길이 정보 준비 완료 · " + formatNumber(state.durationIndexKnown) + " / " + formatNumber(state.catalog ? state.catalog.record_count : 0) + "개";
+            return;
+          }
+          elements.durationIndexButton.textContent = "길이 정보 준비";
+          elements.durationIndexStatus.textContent = "길이별 필터를 사용하려면 길이 정보를 준비하세요.";
+        }
+
+        function durationSchemaKey(record) {
+          return record.dataset + "|" + record.variant + "|" + record.signal_source;
+        }
+
+        function durationColumnFor(record) {
+          var signalFile = record.summaryFile || record.originFile;
+          if (!signalFile || typeof signalFile.slice !== "function") {
+            return Promise.resolve(null);
+          }
+          var schemaKey = durationSchemaKey(record);
+          if (!state.durationColumnPromises.has(schemaKey)) {
+            var headerRead = signalFile.slice(0, Math.min(signalFile.size || 4096, 4096)).text()
+              .then(function (text) {
+                var line = String(text || "").replace(/^\uFEFF/, "").split(/\r?\n/)[0] || "";
+                var headers = headerMap(line);
+                return headers.cum_tm === undefined ? null : headers.cum_tm;
+              })
+              .catch(function () {
+                return null;
+              });
+            state.durationColumnPromises.set(schemaKey, headerRead);
+          }
+          return state.durationColumnPromises.get(schemaKey);
+        }
+
+        async function readRecordDuration(record) {
+          if (typeof record.duration_ms === "number") {
+            return record.duration_ms;
+          }
+          var signalFile = record.summaryFile || record.originFile;
+          if (!signalFile || typeof signalFile.slice !== "function" || !signalFile.size) {
+            return null;
+          }
+          var cumulativeColumn = await durationColumnFor(record);
+          if (cumulativeColumn === null) {
+            return null;
+          }
+          try {
+            var tailSize = Math.min(signalFile.size, 8192);
+            var tail = await signalFile.slice(Math.max(0, signalFile.size - tailSize), signalFile.size).text();
+            var lines = String(tail || "").replace(/\r/g, "").split("\n");
+            for (var index = lines.length - 1; index >= 0; index -= 1) {
+              if (!lines[index].trim()) {
+                continue;
+              }
+              var value = parseNumber(fieldAt(splitCsvLine(lines[index]), cumulativeColumn));
+              if (value !== null && value >= 0) {
+                return value;
+              }
+            }
+          } catch (error) {
+            return null;
+          }
+          return null;
+        }
+
+        async function buildDurationIndex() {
+          if (!state.catalog || state.durationIndexState === "indexing" || state.durationIndexState === "ready") {
+            return;
+          }
+          var serial = ++state.durationIndexSerial;
+          var records = state.catalog.records;
+          var nextIndex = 0;
+          var workerCount = Math.min(8, Math.max(1, records.length));
+          state.durationIndexState = "indexing";
+          state.durationIndexCompleted = 0;
+          state.durationIndexKnown = 0;
+          state.durationColumnPromises = new Map();
+          renderDurationControls();
+
+          async function worker() {
+            while (true) {
+              if (serial !== state.durationIndexSerial) {
+                return;
+              }
+              var index = nextIndex;
+              nextIndex += 1;
+              if (index >= records.length) {
+                return;
+              }
+              var record = records[index];
+              var duration = await readRecordDuration(record);
+              if (serial !== state.durationIndexSerial) {
+                return;
+              }
+              record.duration_ms = duration;
+              if (duration !== null) {
+                state.durationIndexKnown += 1;
+              }
+              state.durationIndexCompleted += 1;
+              if (state.durationIndexCompleted === records.length || state.durationIndexCompleted % 80 === 0) {
+                renderDurationControls();
+                if (state.durationIndexCompleted % 80 === 0) {
+                  await nextPaint();
+                }
+              }
+            }
+          }
+
+          var workers = [];
+          for (var workerIndex = 0; workerIndex < workerCount; workerIndex += 1) {
+            workers.push(worker());
+          }
+          await Promise.all(workers);
+          if (serial !== state.durationIndexSerial) {
+            return;
+          }
+          state.durationIndexState = "ready";
+          renderDurationControls();
+          resetRecordPagination();
+          renderRecordList(true);
+        }
+
+        function filterRecords() {
+          if (!state.catalog) {
+            return [];
+          }
+          var search = elements.searchInput.value.trim().toLowerCase();
+          var labelsOnly = elements.labelsOnly.checked;
+          var bounds = durationBounds();
+          var applyDuration = state.durationIndexState === "ready" && hasDurationFilter();
+          return state.catalog.records.filter(function (record) {
+            if (!state.selectedSources.has(sourceId(record.dataset, record.variant))) {
+              return false;
+            }
+            if (labelsOnly && !record.has_label_file) {
+              return false;
+            }
+            if (applyDuration) {
+              if (typeof record.duration_ms !== "number") {
+                return false;
+              }
+              if (bounds.minimum_ms !== null && record.duration_ms < bounds.minimum_ms) {
+                return false;
+              }
+              if (bounds.maximum_ms !== null && record.duration_ms > bounds.maximum_ms) {
+                return false;
+              }
+            }
+            if (!search) {
+              return true;
+            }
+            return (
+              record.record_id.toLowerCase().indexOf(search) >= 0 ||
+              record.dataset.toLowerCase().indexOf(search) >= 0 ||
+              record.relative_dir.toLowerCase().indexOf(search) >= 0
+            );
+          });
+        }
+
+        function resetRecordPagination() {
+          state.recordRenderLimit = 500;
+        }
+
+        function renderDatasetFilters() {
+          clear(elements.datasetFilters);
+          if (!state.catalog) {
+            return;
+          }
+          var hospitals = new Map();
+          state.catalog.datasets.forEach(function (item) {
+            if (!hospitals.has(item.dataset)) {
+              hospitals.set(item.dataset, []);
+            }
+            hospitals.get(item.dataset).push(item);
+          });
+
+          hospitals.forEach(function (items, hospital) {
+            var group = create("div", "hospital-filter-group");
+            var parentLabel = create("label", "filter-check hospital-filter-title");
+            var parentInput = create("input");
+            var selectedCount = items.filter(function (item) {
+              return state.selectedSources.has(sourceId(item.dataset, item.variant));
+            }).length;
+            parentInput.type = "checkbox";
+            parentInput.checked = selectedCount === items.length;
+            parentInput.indeterminate = selectedCount > 0 && selectedCount < items.length;
+            parentInput.addEventListener("change", function () {
+              items.forEach(function (item) {
+                var source = sourceId(item.dataset, item.variant);
+                if (parentInput.checked) {
+                  state.selectedSources.add(source);
+                } else {
+                  state.selectedSources.delete(source);
+                }
+              });
+              renderDatasetFilters();
+              resetRecordPagination();
+              renderRecordList();
+            });
+            parentLabel.appendChild(parentInput);
+            parentLabel.appendChild(create("span", "", hospital));
+            parentLabel.appendChild(create("span", "filter-count", formatNumber(items.reduce(function (sum, item) {
+              return sum + item.count;
+            }, 0))));
+            group.appendChild(parentLabel);
+
+            var variants = create("div", "variant-filter-list");
+            items.forEach(function (item) {
+              var source = sourceId(item.dataset, item.variant);
+              var label = create("label", "filter-check");
+              var input = create("input");
+              input.type = "checkbox";
+              input.checked = state.selectedSources.has(source);
+              input.addEventListener("change", function () {
+                if (input.checked) {
+                  state.selectedSources.add(source);
+                } else {
+                  state.selectedSources.delete(source);
+                }
+                renderDatasetFilters();
+                resetRecordPagination();
+                renderRecordList();
+              });
+              label.appendChild(input);
+              label.appendChild(create("span", "", variantLabel(item.variant)));
+              label.appendChild(create("span", "filter-count", formatNumber(item.count)));
+              variants.appendChild(label);
+            });
+            group.appendChild(variants);
+            elements.datasetFilters.appendChild(group);
+          });
+        }
+
+        function renderRecordList(keepScrollPosition) {
+          var records = filterRecords();
+          var renderLimit = Math.max(500, state.recordRenderLimit);
+          var listRecords = records.slice(0, renderLimit);
+          var hospitalCounts = new Map();
+          var hospitalVariants = new Map();
+          var previousScrollTop = keepScrollPosition ? elements.recordList.scrollTop : null;
+          clear(elements.recordList);
+          elements.filterResult.textContent = records.length > listRecords.length
+            ? formatNumber(records.length) + "개 중 " + formatNumber(listRecords.length) + "개 표시 · 아래로 스크롤해 더 보기"
+            : formatNumber(records.length) + "개 레코드";
+
+          records.forEach(function (record) {
+            hospitalCounts.set(record.dataset, (hospitalCounts.get(record.dataset) || 0) + 1);
+            if (!hospitalVariants.has(record.dataset)) {
+              hospitalVariants.set(record.dataset, new Set());
+            }
+            hospitalVariants.get(record.dataset).add(record.variant);
+          });
+
+          var currentHospital = null;
+          var currentVariant = null;
+          listRecords.forEach(function (record) {
+            if (record.dataset !== currentHospital) {
+              var hospitalHeading = create("div", "record-hospital-heading");
+              hospitalHeading.appendChild(create("span", "", record.dataset));
+              hospitalHeading.appendChild(create("span", "", formatNumber(hospitalCounts.get(record.dataset)) + "개"));
+              elements.recordList.appendChild(hospitalHeading);
+              currentHospital = record.dataset;
+              currentVariant = null;
+            }
+            if (hospitalVariants.get(record.dataset).size > 1 && record.variant !== currentVariant) {
+              elements.recordList.appendChild(create("div", "record-variant-heading", variantLabel(record.variant)));
+              currentVariant = record.variant;
+            }
+            var button = create("button", "record-item");
+            button.type = "button";
+            button.setAttribute("role", "option");
+            button.setAttribute("aria-selected", String(record.key === state.currentKey));
+            if (record.key === state.currentKey) {
+              button.classList.add("is-selected");
+            }
+            var header = create("span", "record-item-header");
+            header.appendChild(create("strong", "", record.record_id));
+            header.appendChild(create("span", "source-pill" + classForVariant(record.variant), record.variant === "processed" ? "Processed" : "Raw"));
+            button.appendChild(header);
+            var subtitle = record.dataset + " · " + record.signal_source;
+            if (!record.has_label_file) {
+              subtitle += " · Label 없음";
+            }
+            button.appendChild(create("small", "", subtitle));
+            button.addEventListener("click", function () {
+              selectRecord(record.key, true);
+            });
+            elements.recordList.appendChild(button);
+          });
+
+          if (previousScrollTop !== null) {
+            elements.recordList.scrollTop = previousScrollTop;
+          }
+
+          if (!records.length) {
+            if (!state.currentKey) {
+              showOnly("empty");
+            }
+            return;
+          }
+          if (!state.currentKey || !records.some(function (record) { return record.key === state.currentKey; })) {
+            selectRecord(records[0].key, true);
+          } else if (state.detail) {
+            renderCaseNavigation();
+          }
+        }
+
+        function makeChip(text, modifier) {
+          return create("span", "chip" + (modifier ? " " + modifier : ""), text);
+        }
+
+        function renderRecordHeader() {
+          var detail = state.detail;
+          if (!detail) {
+            return;
+          }
+          elements.recordContext.textContent = detail.dataset.toUpperCase() + " · " + (detail.variant === "processed" ? "PROCESSED" : "RAW");
+          elements.recordTitle.textContent = detail.record_id;
+          clear(elements.recordChips);
+          elements.recordChips.appendChild(makeChip(detail.signal_source));
+          var stateClass = detail.label_state === "absent" || detail.label_state === "invalid" ? "is-danger" : "";
+          elements.recordChips.appendChild(makeChip(labelStatusText(detail.label_state), stateClass));
+          if (detail.has_cts) {
+            elements.recordChips.appendChild(makeChip("CTS 원본 있음"));
+          }
+          var recheckCount = detail.labels.filter(function (label) { return label.recheck; }).length;
+          if (recheckCount) {
+            elements.recordChips.appendChild(makeChip("재검토 " + recheckCount + "건", "is-warning"));
+          }
+          if (detail.variant === "processed") {
+            elements.recordChips.appendChild(makeChip("Processed 신호·Label 페어"));
+          }
+          elements.durationMetric.textContent = formatDuration(detail.duration_ms);
+          elements.sampleMetric.textContent = formatNumber(detail.sample_count);
+          elements.labelMetric.textContent = detail.label_state === "absent" ? "없음" : formatNumber(detail.labels.length);
+          renderCaseNavigation();
+        }
+
+        function renderCaseNavigation() {
+          var records = filterRecords();
+          var index = records.findIndex(function (record) {
+            return record.key === state.currentKey;
+          });
+          if (index < 0) {
+            elements.recordPosition.textContent = "필터 결과 밖의 케이스";
+            elements.previousRecordButton.disabled = true;
+            elements.nextRecordButton.disabled = true;
+            return;
+          }
+          elements.recordPosition.textContent = "필터 결과 " + formatNumber(index + 1) + " / " + formatNumber(records.length);
+          elements.previousRecordButton.disabled = index <= 0;
+          elements.nextRecordButton.disabled = index >= records.length - 1;
+        }
+
+        function selectAdjacentRecord(offset) {
+          var records = filterRecords();
+          var index = records.findIndex(function (record) {
+            return record.key === state.currentKey;
+          });
+          var target = index + offset;
+          if (index < 0 || target < 0 || target >= records.length) {
+            return;
+          }
+          selectRecord(records[target].key, true);
+        }
+
+        function renderLabelFilters() {
+          clear(elements.labelFilters);
+          if (!state.detail) {
+            return;
+          }
+          var types = Array.from(new Set(state.detail.labels.map(function (label) { return label.type; }))).sort(function (left, right) {
+            return Number(left) - Number(right);
+          });
+          types.forEach(function (type) {
+            var definition = LABEL_TYPES[type];
+            var label = create("label", "label-filter");
+            label.style.setProperty("--label-color", definition.color);
+            if (!state.selectedLabelTypes.has(type)) {
+              label.classList.add("is-off");
+            }
+            var input = create("input");
+            input.type = "checkbox";
+            input.checked = state.selectedLabelTypes.has(type);
+            input.addEventListener("change", function () {
+              if (input.checked) {
+                state.selectedLabelTypes.add(type);
+              } else {
+                state.selectedLabelTypes.delete(type);
+              }
+              renderVisuals();
+            });
+            var swatch = create("span", "legend-swatch");
+            swatch.style.background = definition.color;
+            label.appendChild(input);
+            label.appendChild(swatch);
+            label.appendChild(create("span", "", definition.key));
+            elements.labelFilters.appendChild(label);
+          });
+          if (!types.length) {
+            elements.labelFilters.appendChild(create("span", "tiny-flag", "표시할 Label이 없습니다."));
+          }
+        }
+
+        function renderLegend(labels) {
+          clear(elements.labelLegend);
+          var types = Array.from(new Set(labels.map(function (label) { return label.type; }))).sort(function (left, right) {
+            return Number(left) - Number(right);
+          });
+          types.forEach(function (type) {
+            var definition = LABEL_TYPES[type];
+            var item = create("span", "legend-item");
+            var swatch = create("span", "legend-swatch");
+            swatch.style.background = definition.color;
+            item.appendChild(swatch);
+            item.appendChild(create("span", "", definition.name));
+            elements.labelLegend.appendChild(item);
+          });
+        }
+
+        function renderLabelList(labels) {
+          clear(elements.labelList);
+          elements.labelWindowCount.textContent = String(labels.length);
+          if (!labels.length) {
+            elements.labelList.appendChild(create("p", "empty-list", "현재 표시 구간에 선택된 Label이 없습니다."));
+            return;
+          }
+          labels.forEach(function (label) {
+            var row = create("button", "label-row");
+            row.type = "button";
+            var color = create("span", "label-color");
+            color.style.background = label.color;
+            var body = create("span");
+            body.appendChild(create("strong", "", label.type_name));
+            body.appendChild(create("small", "", formatRange(label.start_ms, label.end_ms) + " · " + formatDuration(label.duration_ms)));
+            var flags = create("span", "label-flags");
+            if (label.recheck) {
+              flags.appendChild(create("span", "tiny-flag recheck", "재검토"));
+            }
+            if (label.review_red) {
+              flags.appendChild(create("span", "tiny-flag", "이견"));
+            } else if (label.review_green) {
+              flags.appendChild(create("span", "tiny-flag", "동의"));
+            }
+            row.appendChild(color);
+            row.appendChild(body);
+            row.appendChild(flags);
+            row.addEventListener("click", function () {
+              loadSeries(Math.max(0, label.start_ms - currentWindowMs() / 2));
+            });
+            elements.labelList.appendChild(row);
+          });
+        }
+
+        function addQualityRow(label, value) {
+          var row = create("div");
+          row.appendChild(create("dt", "", label));
+          row.appendChild(create("dd", "", value));
+          elements.qualityList.appendChild(row);
+        }
+
+        function countGaps(points, expectedInterval) {
+          if (!points || points.length < 2) {
+            return 0;
+          }
+          var stride = Math.max(1, (state.series.source_point_count || points.length) / points.length);
+          var threshold = expectedInterval * Math.max(2.5, stride * 1.8);
+          var count = 0;
+          for (var index = 1; index < points.length; index += 1) {
+            if (points[index][0] - points[index - 1][0] > threshold) {
+              count += 1;
+            }
+          }
+          return count;
+        }
+
+        function renderQuality() {
+          clear(elements.qualityList);
+          var detail = state.detail;
+          var series = state.series;
+          if (!detail || !series) {
+            return;
+          }
+          addQualityRow("신호 입력", detail.signal_source);
+          addQualityRow("기본 샘플 간격", Math.round(detail.expected_interval_ms) + " ms");
+          addQualityRow("Label 상태", labelStatusText(detail.label_state));
+          addQualityRow("현재 구간 gap", formatNumber(countGaps(series.points, series.expected_interval_ms)));
+          if (detail.processing_stats) {
+            if (detail.processing_stats.orig_valid !== null) {
+              addQualityRow("처리 전 유효 신호", formatNumber(detail.processing_stats.orig_valid));
+            }
+            if (detail.processing_stats.removed_n !== null) {
+              addQualityRow("제거된 신호", formatNumber(detail.processing_stats.removed_n) + " (" + formatPercent(detail.processing_stats.removed_pct) + ")");
+            }
+          }
+          if (detail.source_metadata.hospital) {
+            addQualityRow("JSON 기관값", String(detail.source_metadata.hospital));
+          }
+        }
+
+        function labelAppliesToChannel(label, channel) {
+          return channel === "uc" ? label.type === "6" : label.type !== "6";
+        }
+
+        function colorWithAlpha(hex, alpha) {
+          var trimmed = String(hex || "#64748b").replace("#", "");
+          if (trimmed.length !== 6) {
+            return "rgba(100,116,139," + alpha + ")";
+          }
+          return "rgba(" + parseInt(trimmed.slice(0, 2), 16) + "," + parseInt(trimmed.slice(2, 4), 16) + "," + parseInt(trimmed.slice(4, 6), 16) + "," + alpha + ")";
+        }
+
+        function domainFor(points, valueIndex, valid, channel) {
+          var values = [];
+          points.forEach(function (point) {
+            if (valid(point[valueIndex])) {
+              values.push(point[valueIndex]);
+            }
+          });
+          if (!values.length) {
+            return channel === "fhr" ? [50, 210] : [0, 100];
+          }
+          var minimum = Math.min.apply(null, values);
+          var maximum = Math.max.apply(null, values);
+          if (channel === "fhr") {
+            minimum = Math.min(100, Math.floor(minimum / 10) * 10 - 10);
+            maximum = Math.max(180, Math.ceil(maximum / 10) * 10 + 10);
+          } else {
+            minimum = 0;
+            maximum = Math.max(40, Math.ceil(maximum / 10) * 10 + 10);
+          }
+          return maximum <= minimum ? [minimum, minimum + 1] : [minimum, maximum];
+        }
+
+        function nearestPoint(points, time) {
+          var low = 0;
+          var high = points.length - 1;
+          while (low < high) {
+            var middle = Math.floor((low + high) / 2);
+            if (points[middle][0] < time) {
+              low = middle + 1;
+            } else {
+              high = middle;
+            }
+          }
+          if (low > 0 && Math.abs(points[low - 1][0] - time) < Math.abs(points[low][0] - time)) {
+            return points[low - 1];
+          }
+          return points[low];
+        }
+
+        function drawChart(canvas, options) {
+          if (!state.series) {
+            return;
+          }
+          var points = state.series.points;
+          var bounds = canvas.getBoundingClientRect();
+          var width = Math.max(240, Math.round(bounds.width));
+          var height = Math.max(160, Math.round(bounds.height));
+          var ratio = window.devicePixelRatio || 1;
+          if (canvas.width !== width * ratio || canvas.height !== height * ratio) {
+            canvas.width = width * ratio;
+            canvas.height = height * ratio;
+          }
+          var context = canvas.getContext("2d");
+          context.setTransform(ratio, 0, 0, ratio, 0, 0);
+          context.clearRect(0, 0, width, height);
+
+          var padding = { left: 48, right: 18, top: 12, bottom: 28 };
+          var plotWidth = Math.max(1, width - padding.left - padding.right);
+          var plotHeight = Math.max(1, height - padding.top - padding.bottom);
+          var start = state.series.window_start_ms;
+          var end = state.series.window_end_ms;
+          var range = Math.max(1, end - start);
+          var domain = domainFor(points, options.valueIndex, options.valid, options.channel);
+          var visibleLabels = getVisibleLabels().filter(function (label) {
+            return labelAppliesToChannel(label, options.channel);
+          });
+          var x = function (time) {
+            return padding.left + ((time - start) / range) * plotWidth;
+          };
+          var y = function (value) {
+            return padding.top + (1 - (value - domain[0]) / (domain[1] - domain[0])) * plotHeight;
+          };
+
+          visibleLabels.forEach(function (label) {
+            var left = Math.max(padding.left, x(Math.max(start, label.start_ms)));
+            var right = Math.min(width - padding.right, x(Math.min(end, label.end_ms)));
+            if (right <= left) {
+              return;
+            }
+            context.fillStyle = colorWithAlpha(label.color, label.recheck ? 0.1 : 0.16);
+            context.fillRect(left, padding.top, right - left, plotHeight);
+            context.strokeStyle = colorWithAlpha(label.color, 0.88);
+            context.lineWidth = 1;
+            context.setLineDash(label.recheck ? [4, 3] : []);
+            context.strokeRect(left + 0.5, padding.top + 0.5, Math.max(0, right - left - 1), plotHeight - 1);
+            context.setLineDash([]);
+          });
+
+          context.lineWidth = 1;
+          context.strokeStyle = "rgba(148,163,184,0.42)";
+          context.fillStyle = "rgba(71,85,105,0.9)";
+          context.font = "11px ui-monospace, SFMono-Regular, Menlo, monospace";
+          context.textAlign = "right";
+          context.textBaseline = "middle";
+          for (var horizontal = 0; horizontal <= 4; horizontal += 1) {
+            var value = domain[0] + ((domain[1] - domain[0]) * horizontal) / 4;
+            var gridY = y(value);
+            context.beginPath();
+            context.moveTo(padding.left, gridY);
+            context.lineTo(width - padding.right, gridY);
+            context.stroke();
+            context.fillText(String(Math.round(value)), padding.left - 8, gridY);
+          }
+
+          context.textAlign = "center";
+          context.textBaseline = "top";
+          for (var vertical = 0; vertical <= 4; vertical += 1) {
+            var gridX = padding.left + (plotWidth * vertical) / 4;
+            context.beginPath();
+            context.moveTo(gridX, padding.top);
+            context.lineTo(gridX, height - padding.bottom);
+            context.stroke();
+            context.fillText(formatClock(start + (range * vertical) / 4), gridX, height - padding.bottom + 8);
+          }
+
+          var stride = Math.max(1, (state.series.source_point_count || points.length) / Math.max(1, points.length));
+          var gapThreshold = state.series.expected_interval_ms * Math.max(2.5, stride * 1.8);
+          context.beginPath();
+          context.strokeStyle = options.lineColor;
+          context.lineWidth = 1.65;
+          context.lineJoin = "round";
+          context.lineCap = "round";
+          var previousTime = null;
+          var hasActiveSegment = false;
+          points.forEach(function (point) {
+            var value = point[options.valueIndex];
+            if (!options.valid(value)) {
+              hasActiveSegment = false;
+              previousTime = point[0];
+              return;
+            }
+            var drawX = x(point[0]);
+            var drawY = y(value);
+            if (!hasActiveSegment || previousTime === null || point[0] - previousTime > gapThreshold) {
+              context.moveTo(drawX, drawY);
+              hasActiveSegment = true;
+            } else {
+              context.lineTo(drawX, drawY);
+            }
+            previousTime = point[0];
+          });
+          context.stroke();
+
+          if (!points.some(function (point) { return options.valid(point[options.valueIndex]); })) {
+            context.fillStyle = "rgba(71,85,105,0.82)";
+            context.font = "14px system-ui, sans-serif";
+            context.textAlign = "center";
+            context.textBaseline = "middle";
+            context.fillText("표시할 유효 신호가 없습니다.", width / 2, height / 2);
+          }
+
+          canvas.onmousemove = function (event) {
+            if (!points.length) {
+              return;
+            }
+            var rect = canvas.getBoundingClientRect();
+            var pointerX = event.clientX - rect.left;
+            var ratioX = Math.max(0, Math.min(1, (pointerX - padding.left) / plotWidth));
+            var point = nearestPoint(points, start + ratioX * range);
+            if (!point) {
+              return;
+            }
+            var fhr = validFhr(point[1]) ? Math.round(point[1]) + " bpm" : "결측";
+            var uc = validUc(point[2]) ? Math.round(point[2] * 10) / 10 : "결측";
+            elements.cursorReadout.textContent = formatClock(point[0]) + " · FHR " + fhr + " · UC " + uc;
+          };
+          canvas.onmouseleave = function () {
+            elements.cursorReadout.textContent = "파형 위에 마우스를 올리면 시점과 값을 확인할 수 있습니다.";
+          };
+        }
+
+        function renderCharts() {
+          if (!state.series) {
+            return;
+          }
+          drawChart(elements.fhrCanvas, {
+            channel: "fhr",
+            valueIndex: 1,
+            valid: validFhr,
+            lineColor: "#38bdf8"
+          });
+          drawChart(elements.ucCanvas, {
+            channel: "uc",
+            valueIndex: 2,
+            valid: validUc,
+            lineColor: "#a78bfa"
+          });
+        }
+
+        function renderNavigation() {
+          if (!state.series) {
+            return;
+          }
+          elements.jumpInput.value = (state.series.window_start_ms / 60000).toFixed(1);
+          elements.previousButton.disabled = state.series.window_start_ms <= 0;
+          elements.nextButton.disabled = state.series.window_end_ms >= state.series.duration_ms;
+        }
+
+        function renderVisuals() {
+          if (!state.detail || !state.series) {
+            return;
+          }
+          renderRecordHeader();
+          renderLabelFilters();
+          var labels = getVisibleLabels();
+          renderLegend(labels);
+          renderLabelList(labels);
+          renderQuality();
+          renderNavigation();
+          renderCharts();
+        }
+
+        function loadSeries(startMs) {
+          if (!state.detail || !state.detail.signal) {
+            return;
+          }
+          state.startMs = Math.max(0, Number(startMs) || 0);
+          state.series = buildSeries(state.detail.signal, state.startMs);
+          state.startMs = state.series.window_start_ms;
+          showOnly("viewer");
+          renderVisuals();
+        }
+
+        async function selectRecord(key, resetWindow) {
+          if (!state.catalog || !key) {
+            return;
+          }
+          var record = state.catalog.records.find(function (item) { return item.key === key; });
+          if (!record) {
+            return;
+          }
+          var serial = ++state.requestSerial;
+          state.currentKey = key;
+          state.detail = null;
+          state.series = null;
+          if (resetWindow) {
+            state.startMs = 0;
+          }
+          renderRecordList(true);
+          elements.loadingMessage.textContent = record.record_id + " 신호와 Label을 읽고 있습니다.";
+          showOnly("loading");
+          try {
+            var loaded = await Promise.all([readSignal(record), readLabels(record)]);
+            if (serial !== state.requestSerial) {
+              return;
+            }
+            var signal = loaded[0];
+            var labelData = loaded[1];
+            record.duration_ms = signal.duration_ms;
+            state.detail = Object.assign({}, record, {
+              signal: signal,
+              duration_ms: signal.duration_ms,
+              sample_count: signal.times.length,
+              expected_interval_ms: signal.expected_interval_ms,
+              labels: labelData.labels,
+              source_metadata: labelData.source_metadata,
+              label_state: labelData.label_state
+            });
+            state.detail.labels.forEach(function (label) {
+              state.selectedLabelTypes.add(label.type);
+            });
+            loadSeries(state.startMs);
+          } catch (error) {
+            if (serial === state.requestSerial) {
+              showError(error);
+            }
+          }
+        }
+
+        function showError(error) {
+          elements.errorMessage.textContent = error && error.message ? error.message : "알 수 없는 오류가 발생했습니다.";
+          showOnly("error");
+        }
+
+        function resetForFolder() {
+          state.catalog = null;
+          state.currentKey = null;
+          state.detail = null;
+          state.series = null;
+          state.startMs = 0;
+          state.selectedSources = new Set();
+          state.selectedLabelTypes = new Set();
+          state.recordRenderLimit = 500;
+          state.durationIndexSerial += 1;
+          state.durationIndexState = "idle";
+          state.durationIndexCompleted = 0;
+          state.durationIndexKnown = 0;
+          state.durationColumnPromises = new Map();
+          state.signalCache.clear();
+          elements.searchInput.value = "";
+          elements.labelsOnly.checked = false;
+          elements.minDurationInput.value = "";
+          elements.maxDurationInput.value = "";
+          clear(elements.datasetFilters);
+          clear(elements.recordList);
+          renderDurationControls();
+        }
+
+        async function loadFolder(files) {
+          if (!files || !files.length) {
+            return;
+          }
+          var serial = ++state.folderSerial;
+          ++state.requestSerial;
+          resetForFolder();
+          setHidden(elements.landing, true);
+          setHidden(elements.app, false);
+          elements.loadingMessage.textContent = "선택한 폴더의 파일 목록을 준비하고 있습니다.";
+          showOnly("loading");
+          await nextPaint();
+          try {
+            var catalog = await indexFolder(files, serial);
+            if (!catalog || serial !== state.folderSerial) {
+              return;
+            }
+            if (!catalog.records.length) {
+              throw new Error("레코드를 찾지 못했습니다. _origin.csv 또는 _summary.csv 파일을 포함한 압축 해제 폴더를 선택해 주세요.");
+            }
+            state.catalog = catalog;
+            state.selectedSources = new Set(catalog.datasets.map(function (item) {
+              return sourceId(item.dataset, item.variant);
+            }));
+            elements.sourceName.textContent = catalog.data_root_name + " · " + formatNumber(catalog.record_count) + "개 레코드";
+            elements.recordCount.textContent = formatNumber(catalog.record_count) + "개";
+            renderDurationControls();
+            renderDatasetFilters();
+            renderRecordList();
+          } catch (error) {
+            if (serial === state.folderSerial) {
+              showError(error);
+            }
+          }
+        }
+
+        function bindEvents() {
+          elements.folderInput.addEventListener("change", function (event) {
+            var files = Array.prototype.slice.call(event.target.files || []);
+            loadFolder(files);
+            event.target.value = "";
+          });
+          elements.clearSelectionButton.addEventListener("click", function () {
+            elements.folderInput.click();
+          });
+          elements.searchInput.addEventListener("input", function () {
+            resetRecordPagination();
+            renderRecordList();
+          });
+          elements.labelsOnly.addEventListener("change", function () {
+            resetRecordPagination();
+            renderRecordList();
+          });
+          elements.durationIndexButton.addEventListener("click", buildDurationIndex);
+          [elements.minDurationInput, elements.maxDurationInput].forEach(function (input) {
+            input.addEventListener("input", function () {
+              if (state.durationIndexState !== "ready") {
+                return;
+              }
+              resetRecordPagination();
+              renderRecordList();
+            });
+          });
+          elements.recordList.addEventListener("scroll", function () {
+            if (!state.catalog) {
+              return;
+            }
+            var isNearBottom = elements.recordList.scrollTop + elements.recordList.clientHeight >= elements.recordList.scrollHeight - 80;
+            var recordCount = filterRecords().length;
+            if (isNearBottom && state.recordRenderLimit < recordCount) {
+              state.recordRenderLimit = Math.min(recordCount, state.recordRenderLimit + 500);
+              renderRecordList(true);
+            }
+          });
+          elements.previousRecordButton.addEventListener("click", function () {
+            selectAdjacentRecord(-1);
+          });
+          elements.nextRecordButton.addEventListener("click", function () {
+            selectAdjacentRecord(1);
+          });
+          elements.windowSelect.addEventListener("change", function () {
+            state.windowMinutes = Number(elements.windowSelect.value);
+            if (state.detail) {
+              loadSeries(state.startMs);
+            }
+          });
+          elements.previousButton.addEventListener("click", function () {
+            loadSeries(Math.max(0, state.startMs - currentWindowMs()));
+          });
+          elements.nextButton.addEventListener("click", function () {
+            if (state.series) {
+              loadSeries(Math.min(state.series.duration_ms, state.startMs + currentWindowMs()));
+            }
+          });
+          elements.jumpButton.addEventListener("click", function () {
+            var minutes = Number(elements.jumpInput.value);
+            if (Number.isFinite(minutes)) {
+              loadSeries(Math.max(0, minutes * 60000));
+            }
+          });
+          elements.jumpInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") {
+              elements.jumpButton.click();
+            }
+          });
+
+          if (window.ResizeObserver) {
+            var resizeObserver = new ResizeObserver(function () {
+              if (!state.series) {
+                return;
+              }
+              window.clearTimeout(state.resizeTimer);
+              state.resizeTimer = window.setTimeout(renderCharts, 80);
+            });
+            resizeObserver.observe(elements.fhrCanvas);
+            resizeObserver.observe(elements.ucCanvas);
+          } else {
+            window.addEventListener("resize", function () {
+              if (state.series) {
+                renderCharts();
+              }
+            });
+          }
+        }
+
+        bindEvents();
+      }());
+    </script>
+  </body>
+</html>
