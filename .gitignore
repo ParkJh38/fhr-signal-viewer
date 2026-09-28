@@ -1,0 +1,35 @@
+# Clinical data and local test data must never be committed.
+/upload/
+/data/
+/dataset/
+/datasets/
+/.local-testdata/
+*.csv
+*.tsv
+*.json
+*.cts
+*.zip
+*.7z
+*.tar
+*.gz
+*.rar
+*.h5
+*.hdf5
+*.npy
+*.npz
+*.parquet
+
+# Generated artifacts and local inspection output.
+/screenshots/
+/reports/
+*.log
+
+# Local development files.
+.DS_Store
+__pycache__/
+*.py[cod]
+.idea/
+.vscode/
+node_modules/
+dist/
+build/
